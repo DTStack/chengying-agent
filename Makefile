@@ -64,9 +64,6 @@ debug: clean-debug proto sidecar-debug server-debug asset
 
 clean: clean-release clean-debug
 
-godep:
-	$(GODEP) save ./...
-
 all: debug release
 
 .DEFAULT_GOAL := debug

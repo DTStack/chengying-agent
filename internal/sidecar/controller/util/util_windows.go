@@ -18,7 +18,7 @@ func (c *Cgroup) GetInitStub() string {
 	return ""
 }
 
-func CommandContext(ctx context.Context, isSeniorKill bool, cg *Cgroup, name string, arg ...string) *Cmd {
+func CommandContext(ctx context.Context, user string, isSeniorKill bool, cg *Cgroup, name string, arg ...string) *Cmd {
 	return &Cmd{Cmd: exec.CommandContext(ctx, name, arg...)}
 }
 
