@@ -18,6 +18,10 @@ easyagent主要有sidecar和server两个组件，sidecar部署在主机端，sid
 
 请点击[快速开始](docs/quickstart.md)
 
+# API 文档
+
+Please click [Api 文档](docs/server-api.md)
+
 # 通信接口定义
 
 请点击[通信接口定义](docs/protoc.md)

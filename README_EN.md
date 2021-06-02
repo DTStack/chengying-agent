@@ -19,6 +19,10 @@ With one-way gRPC-connection between the sidecar and the server(from sidecar to 
 
 Please click [Quick Start](docs/quickstart.md)
 
+# API Reference
+
+Please click [Api Reference](docs/server-api.md)
+
 # protoc messages
 
 Please click [Quick Start](docs/quickstart.md)
