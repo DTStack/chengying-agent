@@ -6,11 +6,11 @@ Easyagent
 English | [中文](README.md)
 
 # Introduction
-Easyagent is an infrastructure component based on gRPC widely used in dtstack, which apply to manage the life-cycle of service on the remote host. Best practice is to manage the life-cycle of the beats of ELK and Hadoop components.
+Easyagent is an infrastructure component based on gRPC widely used in dtstack, applied to manage the life-cycle of service on the remote host. The best practice is to manage the life-cycle of the beats of ELK and Hadoop components.
 
 # Fundamental
-Easyagent is composed of two parts: sidecar and server, the former is deployed on the remote hosts and communicate with the latter with [gRPC](https://github.com/grpc/grpc-go) messages, which are definded with [protobuf](https://github.com/gogo/protobuf).
-With one-way gRPC-connection between the sidecar and the server(from sidecar to server), upon the rest api surpported by the easyagent server, other systems or components can control the remotes sidecar(host) and install/start/stop/config/uninstall the target application.
+Easyagent is composed of two parts: sidecar and server, the former is deployed on the remote hosts and communicate with the latter with [gRPC](https://github.com/grpc/grpc-go) messages, which are defined with [protobuf](https://github.com/gogo/protobuf).
+With one-way gRPC-connection between the sidecar and the server(from sidecar to server), upon the rest api supported by the easyagent server, other systems or components can control the remotes sidecar(host) and install/start/stop/config/uninstall the target application.
 <div align=center>
   <img src=docs/images/easyagent.png width=700 />
 </div>
