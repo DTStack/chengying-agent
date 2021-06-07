@@ -32,7 +32,7 @@ Please click [Api 文档](docs/server-api.md)
 
 # 如何贡献
 
-请点击[如何贡献FlinkX](docs/contribution.md)
+请点击[如何贡献](docs/contribution.md)
 
 # License
 
