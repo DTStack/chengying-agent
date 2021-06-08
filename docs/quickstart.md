@@ -40,11 +40,3 @@ curl 'http://127.0.0.1:8889/api/v1/deploy/sidecar/install/shell?TargetPath=/opt/
 ps -ef|grep sidecar
 
 ```
-
-## run agent in local mode
-- prepare the config file 
-- prepare mysql and run the init sql
-- run the easyagent server with the cmd below
-```
-./easy-agent-server -c example-config.yml --debug
-```
