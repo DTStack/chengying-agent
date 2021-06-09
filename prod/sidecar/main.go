@@ -103,13 +103,9 @@ func main() {
 		event.SetEventDefaultClient(eaClient)
 		monitor.SetMonitorInterval(cfg.EasyAgent.MonitorInterval)
 		register.RegisterSidecar(eaClient, ctl, cfg.CallBack)
-		if err = base.MountCgroup(); err == nil {
-			err = base.InitTC(cfg.EasyAgent.Network)
-		}
-		if err != nil {
+		if err = base.MountCgroup(); err != nil {
 			event.ReportEvent(&proto.Event_AgentError{Errstr: err.Error()})
 		}
-
 		ctl.Run()
 		monitor.StartMonitSystem()
 

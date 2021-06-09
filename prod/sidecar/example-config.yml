@@ -15,7 +15,6 @@ rpc:
 
 easyagent:
   uuid: 87dacbba-5be4-4c85-9b05-f313b1ee80b9
-  network: [eth0]
   monitor-interval: 30s
 
 callback:
