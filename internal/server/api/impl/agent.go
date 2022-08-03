@@ -23,6 +23,7 @@ import (
 	"easyagent/internal/proto"
 	"easyagent/internal/server/log"
 	"easyagent/internal/server/model"
+	"easyagent/internal/server/report"
 	"easyagent/internal/server/shipper"
 
 	"fmt"
@@ -106,7 +107,14 @@ func StopAgent(ctx context.Context) apibase.Result {
 		apibase.ThrowDBModelError(err)
 	}
 	log.Debugf("Stop agent collectorid %v, agentid %v, seq %v", collectorId.String(), agentId.String(), seq)
-
+	//当 execId 不为空串的时候才汇报 seq
+	execId := ctx.GetHeader("execId")
+	if execId != "" {
+		err = report.ReportSeq(execId, uint32(seq))
+		if err != nil {
+			log.Errorf("%s", err.Error())
+		}
+	}
 	err = shipper.GetApiShipper().StopShipper(uint32(seq), collectorId, agentId, stopAgentOptionsType)
 
 	if err != nil {
@@ -149,7 +157,14 @@ func StartAgent(ctx context.Context) apibase.Result {
 		apibase.ThrowDBModelError(err)
 	}
 	log.Debugf("Start agent collectorid %v, agentid %v, seq %v", collectorId.String(), agentId.String(), seq)
-
+	//当 execId 不为空串的时候才汇报 seq
+	execId := ctx.GetHeader("execId")
+	if execId != "" {
+		err = report.ReportSeq(execId, uint32(seq))
+		if err != nil {
+			log.Errorf("%s", err.Error())
+		}
+	}
 	err = shipper.GetApiShipper().StartShipper(uint32(seq), collectorId, agentId)
 
 	if err != nil {
@@ -192,7 +207,14 @@ func StartAgentWithParam(ctx context.Context) apibase.Result {
 		apibase.ThrowDBModelError(err)
 	}
 	log.Debugf("Start agent collectorid %v, agentid %v, seq %v", collectorId.String(), agentId.String(), seq)
-
+	//当 execId 不为空串的时候才汇报 seq
+	execId := ctx.GetHeader("execId")
+	if execId != "" {
+		err = report.ReportSeq(execId, uint32(seq))
+		if err != nil {
+			log.Errorf("%s", err.Error())
+		}
+	}
 	err = shipper.GetApiShipper().StartShipperWithParam(uint32(seq), collectorId, agentId, *params)
 
 	if err != nil {
@@ -256,7 +278,14 @@ func UpdateAgentConfig(ctx context.Context) apibase.Result {
 		apibase.ThrowDBModelError(err)
 	}
 	log.Debugf("Update agent config collectorid %v, agentid %v, seq %v", collectorId.String(), agentId.String(), seq)
-
+	//当 execId 不为空串的时候才汇报 seq
+	execId := ctx.GetHeader("execId")
+	if execId != "" {
+		err = report.ReportSeq(execId, uint32(seq))
+		if err != nil {
+			log.Errorf("%s", err.Error())
+		}
+	}
 	err = shipper.GetApiShipper().UpdateAgentConfigShipper(uint32(seq), collectorId, agentId, configContent)
 
 	if err != nil {
@@ -328,7 +357,14 @@ func InstallAgent(ctx context.Context) apibase.Result {
 	}
 
 	log.Debugf("Install agent collectorid %v, agentid %v, seq %d", collectorId, agentId, seq)
-
+	//当 execId 不为空串的时候才汇报 seq
+	execId := ctx.GetHeader("execId")
+	if execId != "" {
+		err = report.ReportSeq(execId, uint32(seq))
+		if err != nil {
+			log.Errorf("%s", err.Error())
+		}
+	}
 	err = shipper.GetApiShipper().InstallShipper(uint32(seq), collectorId, agentId, params)
 
 	if err != nil {
@@ -370,7 +406,14 @@ func UpdateAgent(ctx context.Context) apibase.Result {
 		apibase.ThrowDBModelError(err)
 	}
 	log.Debugf("Update agent collectorid %v, agentid %v, seq %v", collectorId.String(), agentId.String(), seq)
-
+	//当 execId 不为空串的时候才汇报 seq
+	execId := ctx.GetHeader("execId")
+	if execId != "" {
+		err = report.ReportSeq(execId, uint32(seq))
+		if err != nil {
+			log.Errorf("%s", err.Error())
+		}
+	}
 	err = shipper.GetApiShipper().UpdateShipper(uint32(seq), collectorId, agentId, params)
 
 	if err != nil {
@@ -413,7 +456,14 @@ func UninstallAgent(ctx context.Context) apibase.Result {
 		apibase.ThrowDBModelError(err)
 	}
 	log.Debugf("UnInstall agent collectorid %v, agentid %v, seq %v", collectorId.String(), agentId.String(), seq)
-
+	//当 execId 不为空串的时候才汇报 seq
+	execId := ctx.GetHeader("execId")
+	if execId != "" {
+		err = report.ReportSeq(execId, uint32(seq))
+		if err != nil {
+			log.Errorf("%s", err.Error())
+		}
+	}
 	err = shipper.GetApiShipper().UnInstallShipper(uint32(seq), collectorId, agentId, params)
 
 	if err != nil {

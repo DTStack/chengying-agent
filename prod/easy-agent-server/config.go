@@ -19,6 +19,8 @@
 package main
 
 import (
+	"easyagent/internal/server/report"
+	rpc2 "easyagent/internal/server/rpc"
 	"fmt"
 	"os"
 
@@ -58,12 +60,25 @@ type RpcConfig struct {
 	KeyFile  string `config:"key"`
 }
 
+type ReportConfig struct {
+	Host           string `config:"host"`
+	SeqUri         string `config:"seq-uri" `
+	IsShowLogUri   string `config:"is-show-log-uri"`
+	ShellStatusUri string `config:"shell-status-uri"`
+}
+
+type ShellConfig struct {
+	LogPath string `config:"log-path"`
+}
+
 type Config struct {
 	MysqlDb DatabaseConfig          `config:"mysqldb" validate:"required"`
 	Publish map[string]*ucfg.Config `config:"publish"`
 	Log     LogConfig               `config:"log" validate:"required"`
 	Api     ApiConfig               `config:"api" validate:"required"`
 	Rpc     RpcConfig               `config:"rpc" validate:"required"`
+	Report  ReportConfig            `config:"report"`
+	Shell   ShellConfig             `config:"shell"`
 }
 
 func ParseConfig(configFile string) error {
@@ -87,6 +102,12 @@ func ParseConfig(configFile string) error {
 		fmt.Printf("Saving logs at %s\n", clog.Dir)
 	}
 
+	reportCfg := &config.Report
+	report.ReportHost = reportCfg.Host
+	report.ReportSeqUri = reportCfg.SeqUri
+	report.IsShowLogUri = reportCfg.IsShowLogUri
+	report.ShellStatusUri = reportCfg.ShellStatusUri
+	rpc2.ShellLogPath = config.Shell.LogPath
 	db := &config.MysqlDb
 	if err := model.ConfigureMysqlDatabase(db.Host, db.Port, db.User, db.Password, db.DbName); err != nil {
 		return err

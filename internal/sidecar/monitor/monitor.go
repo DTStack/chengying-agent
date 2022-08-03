@@ -19,6 +19,7 @@
 package monitor
 
 import (
+	"github.com/shirou/gopsutil/cpu"
 	"net"
 	"os"
 	"runtime"
@@ -222,6 +223,7 @@ func collectSystemMetrics() {
 
 		ev := &proto.Event_OsResourceUsages{}
 
+		count, _ := cpu.Counts(true)
 		current := &gosigar.Cpu{}
 		if err := current.Get(); err != nil {
 			base.Errorf("system cpu get error: %v", err)
@@ -230,6 +232,7 @@ func collectSystemMetrics() {
 				deltaAll := float32(current.Total() - last.Total())
 				deltaIdle := float32(current.Idle - last.Idle)
 				ev.CpuUsage = 1 - deltaIdle/deltaAll
+				ev.CpuCores = uint32(count)
 				//base.Debugf("system cpu: %.2f", ev.CpuUsage)
 			}
 			last = current
@@ -240,6 +243,7 @@ func collectSystemMetrics() {
 			base.Errorf("system memory get error: %v", err)
 		} else {
 			ev.MemUsage = mem.ActualUsed
+			ev.MemSize = mem.Total
 			//base.Debugf("system memory used: %d", ev.MemUsage)
 		}
 

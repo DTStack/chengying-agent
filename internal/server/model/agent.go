@@ -163,3 +163,19 @@ func (l *agentList) CheckAgentId(id uuid.UUID) (uuid.UUID, error) {
 	}
 	return id, nil
 }
+
+func (l *agentList) GetClusterHostMap() map[string]int {
+	rows, _ := l.GetDB().Queryx("SELECT b.ip,a.clusterId FROM deploy_cluster_host_rel as a inner join deploy_host as b on a.sid = b.sid " +
+		"where b.status != -4 and isDeleted = 0")
+	defer rows.Close()
+	item := make(map[string]int)
+	for rows.Next() {
+		d := struct {
+			Ip        string `db:"ip"`
+			ClusterId int    `db:"clusterId"`
+		}{}
+		_ = rows.StructScan(&d)
+		item[d.Ip] = d.ClusterId
+	}
+	return item
+}

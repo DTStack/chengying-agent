@@ -20,12 +20,56 @@ package util
 
 import (
 	"bytes"
+	"easyagent/internal/sidecar/base"
+	rpcCli "easyagent/internal/sidecar/client"
 	"fmt"
 	"os"
 	"os/exec"
 	"strconv"
 	"syscall"
 )
+
+var RpcClient rpcCli.EaClienter
+
+// 1M
+var MaxLength = 1024 * 1024
+
+type ReportShellLogStruct struct {
+	PrefixSuffixSaver *PrefixSuffixSaver
+	Seqno             uint32
+	Length            int
+}
+
+func (r *ReportShellLogStruct) Bytes() []byte {
+	if r.PrefixSuffixSaver.suffix == nil {
+		return r.PrefixSuffixSaver.prefix
+	}
+	if r.PrefixSuffixSaver.skipped == 0 {
+		return append(r.PrefixSuffixSaver.prefix, r.PrefixSuffixSaver.suffix...)
+	}
+	var buf bytes.Buffer
+	buf.Grow(len(r.PrefixSuffixSaver.prefix) + len(r.PrefixSuffixSaver.suffix) + 50)
+	buf.Write(r.PrefixSuffixSaver.prefix)
+	buf.WriteString("\n... omitting ")
+	buf.WriteString(strconv.FormatInt(r.PrefixSuffixSaver.skipped, 10))
+	buf.WriteString(" bytes ...\n")
+	buf.Write(r.PrefixSuffixSaver.suffix[r.PrefixSuffixSaver.suffixOff:])
+	buf.Write(r.PrefixSuffixSaver.suffix[:r.PrefixSuffixSaver.suffixOff])
+	return buf.Bytes()
+}
+
+var seqLogLength = map[uint32]int{}
+
+func (r *ReportShellLogStruct) Write(p []byte) (n int, err error) {
+	r.Length += len(p)
+	if len(p) != 0 && r.Seqno != 0 && r.Length <= MaxLength {
+		err = RpcClient.ReportShellLog(string(p), r.Seqno)
+		if err != nil {
+			base.Errorf("ReportShellLog error: %v", err)
+		}
+	}
+	return r.PrefixSuffixSaver.Write(p)
+}
 
 // GetExitCode returns the ExitStatus of the specified error if its type is
 // exec.ExitError, returns 0 and an error otherwise.

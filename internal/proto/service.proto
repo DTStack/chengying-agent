@@ -31,6 +31,8 @@ service EasyAgentService {
     rpc registerSidecar (RegisterRequest) returns (RegisterResponse);
     rpc readyForControl (ControlRequest) returns (stream ControlResponse);
     rpc reportEvent (Event) returns (EmptyResponse);
+    rpc reportShellContent (ShellReport) returns (EmptyResponse);
+    rpc reportShellLog (stream ShellReport) returns (EmptyResponse);
 }
 
 service TransferService {
@@ -238,6 +240,7 @@ message Event {
     message AgentError {
         bytes agentId = 1 [(gogoproto.customtype) = "Uuid", (gogoproto.nullable) = false];
         string errstr = 2;
+        uint32 seqno = 3;
     }
 
     message OsResourceUsages {
@@ -248,6 +251,8 @@ message Event {
         double uptime = 5;
         repeated DiskUsage diskUsage = 6 [(gogoproto.nullable) = false];
         repeated NetStat netStats = 7 [(gogoproto.nullable) = false];
+        uint32 cpuCores = 8;
+        uint64 memSize = 9;
     }
 
     message DiskUsage {
@@ -282,6 +287,7 @@ message Event {
     message AgentHealthCheck {
         bytes agentId = 1 [(gogoproto.customtype) = "Uuid", (gogoproto.nullable) = false];
         bool failed = 2;
+        uint32 seqno = 3;
     }
 
     message ExecRestResponse {
@@ -291,3 +297,11 @@ message Event {
             bytes agentId = 4 [(gogoproto.customtype) = "Uuid", (gogoproto.nullable) = false];
     }
 }
+
+
+message ShellReport {
+    SidecarRequestHeader H = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+    uint32 seqno = 2;
+    string content = 3;
+}
+

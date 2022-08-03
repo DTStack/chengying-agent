@@ -97,8 +97,24 @@ func InitSidecarInstallSh() {
 }
 
 func GetSidecarInstallShell(ctx context.Context) apibase.Result {
+	var (
+		paramErrs = apibase.NewApiParameterErrors()
+		clientIp  = ctx.RemoteAddr()
+	)
+	cip, err := ctx.URLParamInt("ClusterId")
+	if err != nil {
+		return err
+	}
+	cim := model.AgentList.GetClusterHostMap()
+	if v, ok := cim[clientIp]; ok {
+		if v == cip {
+			return "echo '当前集群已经存在'"
+		} else {
+			return "echo '其他集群已经存在'"
+		}
+	}
 	InitSidecarInstallSh()
-	paramErrs := apibase.NewApiParameterErrors()
+
 	typ := "sidecar"
 	sid := uuid.NewV4()
 	now := time.Now().Unix()

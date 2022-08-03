@@ -91,6 +91,7 @@ type ExecRestParams struct {
 	Body    []byte `json:"body,omitempty"`
 	Timeout string `json:"timeout"`
 	AgentId string `json:"agentId"`
+	ExecId  string `json:"execId"`
 }
 
 func GetApiShipper() *ApiShipper {

@@ -19,6 +19,7 @@
 package main
 
 import (
+	"easyagent/internal/sidecar/controller/util"
 	"fmt"
 	"net"
 	"os"
@@ -36,8 +37,11 @@ import (
 	"easyagent/internal/sidecar/event"
 	"easyagent/internal/sidecar/monitor"
 	"easyagent/internal/sidecar/register"
+
 	"github.com/kardianos/service"
 	"github.com/urfave/cli"
+	"net/http"
+	_ "net/http/pprof"
 )
 
 var winStop = make(chan struct{}, 1)
@@ -121,9 +125,14 @@ func main() {
 		event.SetEventDefaultClient(eaClient)
 		monitor.SetMonitorInterval(cfg.EasyAgent.MonitorInterval)
 		register.RegisterSidecar(eaClient, ctl, cfg.CallBack)
-		if err = base.MountCgroup(); err != nil {
+		util.RpcClient = eaClient
+		if err = base.MountCgroup(); err == nil {
+			err = base.InitTC(cfg.EasyAgent.Network)
+		}
+		if err != nil {
 			event.ReportEvent(&proto.Event_AgentError{Errstr: err.Error()})
 		}
+
 		ctl.Run()
 		monitor.StartMonitSystem()
 
@@ -137,7 +146,14 @@ func main() {
 
 		return nil
 	}
+	go func() {
 
+		err := http.ListenAndServe("0.0.0.0:6060", nil)
+
+		if err != nil {
+			fmt.Printf("init pprof %s\n", err)
+		}
+	}()
 	err := app.Run(os.Args)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "exit with failure: %v\n", err)

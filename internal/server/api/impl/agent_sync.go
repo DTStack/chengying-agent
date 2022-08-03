@@ -19,6 +19,7 @@
 package impl
 
 import (
+	"easyagent/internal/server/report"
 	"fmt"
 	"time"
 
@@ -74,6 +75,14 @@ func InstallAgentSync(ctx context.Context) apibase.Result {
 
 	log.Debugf("Install agent sync collectorid %v, agentid %v, seq %d", collectorId, agentId, seq)
 	InstallProgressLog("[INSTALL] Install agent sync collectorid %v, agentid %v, seq %d, params: %v", collectorId, agentId, seq, *params)
+	//当 execId 不为空串的时候才汇报 seq
+	execId := ctx.GetHeader("execId")
+	if execId != "" {
+		err = report.ReportSeq(execId, uint32(seq))
+		if err != nil {
+			log.Errorf("%s", err.Error())
+		}
+	}
 
 	err, result := shipper.GetApiShipper().InstallShipperSync(uint32(seq), collectorId, agentId, params)
 
@@ -142,6 +151,14 @@ func UninstallAgentSync(ctx context.Context) apibase.Result {
 	}
 	log.Debugf("UnInstall agent collectorid %v, agentid %v, seq %v", collectorId.String(), agentId.String(), seq)
 	InstallProgressLog("[INSTALL] UnInstall agent collectorid %v, agentid %v, seq %v", collectorId.String(), agentId.String(), seq)
+	//当 execId 不为空串的时候才汇报 seq
+	execId := ctx.GetHeader("execId")
+	if execId != "" {
+		err = report.ReportSeq(execId, uint32(seq))
+		if err != nil {
+			log.Errorf("%s", err.Error())
+		}
+	}
 	err, result := shipper.GetApiShipper().UnInstallShipperSync(uint32(seq), collectorId, agentId, params)
 
 	if err != nil {
@@ -203,7 +220,14 @@ func StopAgentSync(ctx context.Context) apibase.Result {
 	}
 	log.Debugf("Stop agent sync collectorid %v, agentid %v, seq %v", collectorId.String(), agentId.String(), seq)
 	ControlProgressLog("[AGENT-CONTROL] Stop agent sync collectorid %v, agentid %v, seq %v", collectorId.String(), agentId.String(), seq)
-
+	//当 execId 不为空串的时候才汇报 seq
+	execId := ctx.GetHeader("execId")
+	if execId != "" {
+		err = report.ReportSeq(execId, uint32(seq))
+		if err != nil {
+			log.Errorf("%s", err.Error())
+		}
+	}
 	err, result := shipper.GetApiShipper().StopShipperSync(uint32(seq), collectorId, agentId, stopAgentOptionsType)
 
 	if err != nil {
@@ -249,7 +273,14 @@ func StartAgentSync(ctx context.Context) apibase.Result {
 	}
 	log.Debugf("Start agent sync  collectorid %v, agentid %v, seq %v", collectorId.String(), agentId.String(), seq)
 	ControlProgressLog("[AGENT-CONTROL] start agent sync collectorid %v, agentid %v, seq %v", collectorId.String(), agentId.String(), seq)
-
+	//当 execId 不为空串的时候才汇报 seq
+	execId := ctx.GetHeader("execId")
+	if execId != "" {
+		err = report.ReportSeq(execId, uint32(seq))
+		if err != nil {
+			log.Errorf("%s", err.Error())
+		}
+	}
 	err, result := shipper.GetApiShipper().StartShipperSync(uint32(seq), collectorId, agentId)
 
 	if err != nil {
@@ -301,7 +332,14 @@ func StartAgentSyncWithParam(ctx context.Context) apibase.Result {
 	}
 	log.Debugf("Start agent sync with param collectorid %v, agentid %v, seq %v", collectorId.String(), agentId.String(), seq)
 	ControlProgressLog("[AGENT-CONTROL] start agent sync with param collectorid %v, agentid %v, seq %v", collectorId.String(), agentId.String(), seq)
-
+	//当 execId 不为空串的时候才汇报 seq
+	execId := ctx.GetHeader("execId")
+	if execId != "" {
+		err = report.ReportSeq(execId, uint32(seq))
+		if err != nil {
+			log.Errorf("%s", err.Error())
+		}
+	}
 	err, result := shipper.GetApiShipper().StartShipperSyncWithParam(uint32(seq), collectorId, agentId, *params)
 
 	if err != nil {
@@ -351,7 +389,14 @@ func RestartAgentSync(ctx context.Context) apibase.Result {
 	}
 	log.Debugf("restart agent stop sync  collectorid %v, agentid %v, seq %v", collectorId.String(), agentId.String(), seq)
 	ControlProgressLog("[AGENT-CONTROL] restart agent stop sync  collectorid %v, agentid %v, seq %v", collectorId.String(), agentId.String(), seq)
-
+	//当 execId 不为空串的时候才汇报 seq
+	execId := ctx.GetHeader("execId")
+	if execId != "" {
+		err = report.ReportSeq(execId, uint32(seq))
+		if err != nil {
+			log.Errorf("%s", err.Error())
+		}
+	}
 	err, result := shipper.GetApiShipper().StopShipperSync(uint32(seq), collectorId, agentId, stopAgentOptionsType)
 	if err != nil {
 		ControlProgressLog("[AGENT-CONTROL] RestartAgentSync  StopShipperSync err: %v", err)
@@ -424,7 +469,14 @@ func UpdateAgentConfigSync(ctx context.Context) apibase.Result {
 	}
 	log.Debugf("Update agent config sync collectorid %v, agentid %v, seq %v", collectorId.String(), agentId.String(), seq)
 	ControlProgressLog("[AGENT-CONTROL] UpdateAgentConfigSync collectorid %v, agentid %v, seq %v", collectorId.String(), agentId.String(), seq)
-
+	//当 execId 不为空串的时候才汇报 seq
+	execId := ctx.GetHeader("execId")
+	if execId != "" {
+		err = report.ReportSeq(execId, uint32(seq))
+		if err != nil {
+			log.Errorf("%s", err.Error())
+		}
+	}
 	err, result := shipper.GetApiShipper().UpdateAgentConfigShipperSync(uint32(seq), collectorId, agentId, *params)
 
 	if err != nil {

@@ -108,6 +108,7 @@ type agent struct {
 	restartCount int
 	startTime    time.Time
 	stdBuff      *util.PrefixSuffixSaver
+	logStruct    *util.ReportShellLogStruct
 }
 
 func NewAgent(cfg config.AgentConfig, flushAgentsCh chan struct{}) Agenter {
@@ -566,8 +567,8 @@ func (ag *agent) update(ctl *proto.ControlResponse_UpdateAgentOptions_, seqno ui
 // it wrapper run
 func (ag *agent) start(ctl *proto.ControlResponse_StartAgentOptions_, seqno uint32) {
 	ev := &proto.Event_OperationProgress{
-		Seqno:   seqno,
 		AgentId: ctl.StartAgentOptions.AgentId,
+		Seqno:   seqno,
 	}
 	if err := ag.run(
 		ctl.StartAgentOptions.CpuLimit,

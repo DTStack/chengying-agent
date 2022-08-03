@@ -20,6 +20,9 @@ package rpc
 
 import (
 	"crypto/tls"
+	"easyagent/internal/server/enums"
+	"easyagent/internal/server/report"
+	"easyagent/internal/server/util"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -27,6 +30,9 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 
@@ -109,6 +115,99 @@ type rpcService struct {
 	sidecarMap map[uuid.UUID]sidecar
 	apiHost    string
 	apiPort    int
+}
+
+var ShellLogPath string
+
+//将shell 内容写入到 共享目录
+func (rpc *rpcService) ReportShellContent(ctx context.Context, shellReport *proto.ShellReport) (*proto.EmptyResponse, error) {
+
+	sid, _ := uuid.FromBytes(shellReport.Id)
+	seqno := shellReport.Seqno
+	content := shellReport.Content
+	showLog, err := report.IsShowLog(seqno)
+	if err != nil || !showLog {
+		return &proto.EmptyResponse{}, nil
+	}
+
+	day := time.Now().Format("2006-01-02") // 格式化时间固定写成2006-01-02 15:04:05
+	shellDir := filepath.Join(ShellLogPath, sid.String(), day, strconv.Itoa(int(seqno)))
+	err = os.MkdirAll(shellDir, os.ModePerm)
+	if err != nil {
+		log.Errorf("ReportShellContent MkdirAll err: %v", err)
+		return nil, err
+	}
+	err = ioutil.WriteFile(filepath.Join(shellDir, "content.sh"), []byte(content), os.ModePerm)
+	if err != nil {
+		log.Errorf("ReportShellContent WriteFile err: %v", err)
+		return nil, err
+	}
+	return &proto.EmptyResponse{}, nil
+}
+
+// 使用 seqno 作为key 防止出现 脚本运行时间跨天 日志在第二天重新生成问题
+
+var fileSyncMap sync.Map
+
+func (rpc *rpcService) ReportShellLog(server proto.EasyAgentService_ReportShellLogServer) error {
+	for {
+		recv, err := server.Recv()
+		if err != nil {
+			log.Errorf("ReportShellLog Recv error: %v", err)
+			return err
+		}
+		sid, _ := uuid.FromBytes(recv.Id)
+		seqno := recv.Seqno
+		content := recv.Content
+
+		showLog, err := report.IsShowLog(seqno)
+		if err != nil || !showLog {
+			continue
+		}
+		day := time.Now().Format("2006-01-02") // 格式化时间固定写成2006-01-02 15:04:05
+		shellDir := filepath.Join(ShellLogPath, sid.String(), day, strconv.Itoa(int(seqno)))
+		//if _, ok := fileMap[seqno]; !ok {
+		if _, ok := fileSyncMap.Load(seqno); !ok {
+			if !util.FileIsExist(shellDir) {
+				err := os.MkdirAll(shellDir, os.ModePerm)
+				if err != nil {
+					log.Errorf("ReportShellLog MkdirAll err: %v", err)
+					return err
+				}
+			}
+			file, err := os.OpenFile(filepath.Join(shellDir, "shell.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+			if err != nil {
+				log.Errorf("OpenFile error: %v", err)
+				return err
+			}
+			//fileMap[seqno] = file
+			fileSyncMap.Store(seqno, file)
+
+		}
+		//_, err = fileMap[seqno].WriteString(content)
+		if file, ok := fileSyncMap.Load(seqno); ok {
+			if f, ok := file.(*os.File); ok {
+				_, err = f.WriteString(content)
+				if err != nil {
+					log.Errorf("ReportShellLog WriteString error: %v", err)
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+//如果运行结束则关闭文件句柄
+func CloseLogFile(seqno uint32) {
+	if seqno == 0 {
+		return
+	}
+	if file, ok := fileSyncMap.Load(seqno); ok {
+		if f, ok := file.(*os.File); ok {
+			f.Close()
+		}
+	}
 }
 
 func init() {
@@ -336,7 +435,18 @@ func (rpc *rpcService) ReportEvent(ctx context.Context, event *proto.Event) (*pr
 		opResult := 0
 		if inst.OpProgress.Failed {
 			opResult = 1
+			err := report.ShellStatusReport(inst.OpProgress.Seqno, enums.ExecStatusType.Failed.Code)
+			if err != nil {
+				log.Errorf("ShellStatusReport error: %v", err)
+			}
+
+		} else {
+			err := report.ShellStatusReport(inst.OpProgress.Seqno, enums.ExecStatusType.Success.Code)
+			if err != nil {
+				log.Errorf("ShellStatusReport error: %v", err)
+			}
 		}
+
 		updateFields := dbhelper.UpdateFields{
 			"finish_time":   time.Now(),
 			"op_result":     opResult,
@@ -349,6 +459,8 @@ func (rpc *rpcService) ReportEvent(ctx context.Context, event *proto.Event) (*pr
 	case *proto.Event_AgentError_:
 		agentErrorTotal.Inc()
 		agentId, _ := uuid.FromBytes(inst.AgentError.AgentId)
+
+		CloseLogFile(inst.AgentError.Seqno)
 		if agentId == uuid.Nil {
 			log.Errorf("sidecar %v error: %v", sid, inst.AgentError.Errstr)
 		} else {
@@ -396,16 +508,21 @@ func (rpc *rpcService) ReportEvent(ctx context.Context, event *proto.Event) (*pr
 			body, []byte(sid.String())); err != nil {
 			log.Errorf("sidecar %v OutputJson Event_OsResourceUsages error: %v", sid, err)
 		}
-		updateFields := dbhelper.UpdateFields{
-			"last_update_date": time.Now(),
-			"cpu_usage":        inst.OsResourceUsages.CpuUsage * 100,
-			"mem_usage":        inst.OsResourceUsages.MemUsage,
-			"swap_usage":       inst.OsResourceUsages.SwapUsage,
-			"load1":            inst.OsResourceUsages.Load1,
-			"uptime":           inst.OsResourceUsages.Uptime,
-			"disk_usage":       diskUsage,
-			"disk_usage_pct":   diskUsagePct,
-			"net_usage":        netUsage,
+		updateFields := dbhelper.UpdateFields{}
+		updateFields["last_update_date"] = time.Now()
+		updateFields["cpu_usage"] = inst.OsResourceUsages.CpuUsage * 100
+		updateFields["mem_usage"] = inst.OsResourceUsages.MemUsage
+		updateFields["swap_usage"] = inst.OsResourceUsages.SwapUsage
+		updateFields["load1"] = inst.OsResourceUsages.Load1
+		updateFields["uptime"] = inst.OsResourceUsages.Uptime
+		updateFields["disk_usage"] = diskUsage
+		updateFields["disk_usage_pct"] = diskUsagePct
+		updateFields["net_usage"] = netUsage
+		//兼容历史版本
+		if inst.OsResourceUsages.CpuCores != 0 {
+			updateFields["cpu_cores"] = inst.OsResourceUsages.CpuCores
+		} else if inst.OsResourceUsages.MemSize != 0 {
+			updateFields["mem_size"] = inst.OsResourceUsages.MemSize
 		}
 		if err = model.SidecarList.UpdateSidecar(sid, updateFields); err != nil {
 			log.Errorf("sidecar %v update Event_OsResourceUsages error: %v", sid, err)
@@ -429,7 +546,19 @@ func (rpc *rpcService) ReportEvent(ctx context.Context, event *proto.Event) (*pr
 		opResult := 0
 		if inst.ExecScriptResponse.Failed {
 			opResult = 1
+			err := report.ShellStatusReport(inst.ExecScriptResponse.Seqno, enums.ExecStatusType.Failed.Code)
+			if err != nil {
+				log.Errorf("ShellStatusReport error: %v", err)
+			}
+		} else {
+			err := report.ShellStatusReport(inst.ExecScriptResponse.Seqno, enums.ExecStatusType.Success.Code)
+			if err != nil {
+				log.Errorf("ShellStatusReport error: %v", err)
+			}
 		}
+
+		//不管执行成功还是失败，都要关闭文件句柄
+		CloseLogFile(inst.ExecScriptResponse.Seqno)
 		updateFields := dbhelper.UpdateFields{
 			"finish_time":   time.Now(),
 			"op_result":     opResult,
@@ -439,6 +568,7 @@ func (rpc *rpcService) ReportEvent(ctx context.Context, event *proto.Event) (*pr
 			log.Errorf("seq %d UpdateAgentOperation error: %v", inst.ExecScriptResponse.Seqno, err)
 		}
 		stopSeqno(inst.ExecScriptResponse.Seqno, inst.ExecScriptResponse)
+
 	case *proto.Event_ExecRestResponse_:
 		stopSeqno(inst.ExecRestResponse.Seqno, inst.ExecRestResponse)
 	case *proto.Event_AgentHealthCheck_:
@@ -453,6 +583,7 @@ func (rpc *rpcService) ReportEvent(ctx context.Context, event *proto.Event) (*pr
 			body, nil); err != nil {
 			log.Errorf("sidecar %v OutputJson Event_ProcessResourceUsages error: %v", sid, err)
 		}
+
 	default:
 		rpcServerErrorTotal.Inc()
 		log.Errorf("unsupport event type: %v", proto.Event_EventType_name[int32(event.EventType)])

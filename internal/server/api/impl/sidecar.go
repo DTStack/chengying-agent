@@ -19,6 +19,7 @@
 package impl
 
 import (
+	"easyagent/internal/server/report"
 	"encoding/base64"
 	"fmt"
 
@@ -199,6 +200,14 @@ func ExecScript(ctx context.Context) apibase.Result {
 
 	log.Debugf("exec script sidecar_id %v, agentid %v, seq %v", SidecarId.String(), agentId, seq)
 	InstallProgressLog("[INSTALL] ExecScriptsidecar_sidecar_id %v, agentid %v, params %v", SidecarId.String(), agentId, *params)
+	//当 execId 不为空串的时候才汇报 seq
+	execId := ctx.GetHeader("execId")
+	if execId != "" {
+		err = report.ReportSeq(execId, uint32(seq))
+		if err != nil {
+			log.Errorf("%s", err.Error())
+		}
+	}
 
 	err = shipper.GetApiShipper().ExecScriptShipper(uint32(seq), SidecarId, agentId, params)
 
@@ -242,17 +251,84 @@ func ExecScriptSync(ctx context.Context) apibase.Result {
 			return fmt.Errorf("[AGENT-CONTROL]ExecScriptSync param agentId is not uuid format: %v", params)
 		}
 	}
+	seq, err := model.AgentOperation.NewOperationRecord(
+		proto.ControlResponse_ControlCmd_name[int32(proto.EXEC_SCRIPT)], SidecarId, agentId)
 
+	if err != nil {
+		ControlProgressLog("[AGENT-CONTROL] ExecScriptSync err: %v", err)
+		apibase.ThrowDBModelError(err)
+	}
+	log.Debugf("exec script sidecar_id %v, agentid %v, seq %v", SidecarId.String(), agentId, seq)
+	ControlProgressLog("[AGENT-CONTROL] ExecScriptSync exec script sidecar_id %v, agentid %v, seq %v", SidecarId.String(), agentId, seq)
+	//当 execId 不为空串的时候才汇报 seq
+	execId := ctx.GetHeader("execId")
+	if execId != "" {
+		err = report.ReportSeq(execId, uint32(seq))
+		if err != nil {
+			log.Errorf("%s", err.Error())
+		}
+	}
+	err, result := shipper.GetApiShipper().ExecScriptShipperSync(uint32(seq), SidecarId, agentId, params)
+
+	if err != nil {
+		ControlProgressLog("[AGENT-CONTROL] ExecScriptSync ExecScriptShipperSync err: %v", err)
+		apibase.ThrowRpcHandleError(err)
+	}
+	ControlProgressLog("[AGENT-CONTROL] ExecScriptSync ExecScriptShipperSync result: %v", result)
+
+	return map[string]interface{}{
+		"sidecar_id":    SidecarId.String(),
+		"operation_seq": seq,
+		"result":        result,
+	}
+}
+
+func ExecScriptOftenSync(ctx context.Context) apibase.Result {
+	paramErrs := apibase.NewApiParameterErrors()
+	params := &shipper.ExecScriptParams{Timeout: "15m"}
+
+	if err := ctx.ReadJSON(&params); err != nil {
+		paramErrs.AppendError("$", err)
+		ControlProgressLog("[AGENT-CONTROL] ExecScriptSync read json err: %v", err)
+	}
+
+	paramErrs.CheckAndThrowApiParameterErrors()
+
+	ControlProgressLog("[AGENT-CONTROL] ExecScriptSync params: %v", *params)
+
+	SidecarIdStr := ctx.Params().Get("sidecar_id")
+	SidecarId, err := uuid.FromString(SidecarIdStr)
+	if err != nil {
+		paramErrs.AppendError("sidecar_id", "sidecar_id not uuid format!")
+		ControlProgressLog("[AGENT-CONTROL] ExecScriptSync sidecar_id not uuid format: %v", SidecarIdStr)
+	}
+
+	if checkForSLB(ctx, SidecarId) {
+		return nil
+	}
+	agentId := uuid.Nil
+	if params.AgentId != "" {
+		agentId, err = uuid.FromString(params.AgentId)
+		if err != nil {
+			return fmt.Errorf("[AGENT-CONTROL]ExecScriptSync param agentId is not uuid format: %v", params)
+		}
+	}
 	seq, err := model.AgentOperation.NewOperationSeqno(SidecarId, agentId)
 
 	if err != nil {
 		ControlProgressLog("[AGENT-CONTROL] ExecScriptSync err: %v", err)
 		apibase.ThrowDBModelError(err)
 	}
-
 	log.Debugf("exec script sidecar_id %v, agentid %v, seq %v", SidecarId.String(), agentId, seq)
 	ControlProgressLog("[AGENT-CONTROL] ExecScriptSync exec script sidecar_id %v, agentid %v, seq %v", SidecarId.String(), agentId, seq)
-
+	//当 execId 不为空串的时候才汇报 seq
+	execId := ctx.GetHeader("execId")
+	if execId != "" {
+		err = report.ReportSeq(execId, uint32(seq))
+		if err != nil {
+			log.Errorf("%s", err.Error())
+		}
+	}
 	err, result := shipper.GetApiShipper().ExecScriptShipperSync(uint32(seq), SidecarId, agentId, params)
 
 	if err != nil {
@@ -299,9 +375,12 @@ func ExecScriptSyncBase64(ctx context.Context) apibase.Result {
 			return fmt.Errorf("[AGENT-CONTROL]ExecScriptSync param agentId is not uuid format: %v", params)
 		}
 	}
+	seq, err := model.AgentOperation.NewOperationRecord(
+		proto.ControlResponse_ControlCmd_name[int32(proto.EXEC_SCRIPT)], SidecarId, agentId)
 
-	seq, err := model.AgentOperation.NewOperationSeqno(SidecarId, agentId)
-
+	if err != nil {
+		log.Errorf("%s", err.Error())
+	}
 	if err != nil {
 		ControlProgressLog("[AGENT-CONTROL] ExecScriptSyncBase64 err: %v", err)
 		apibase.ThrowDBModelError(err)
@@ -309,7 +388,14 @@ func ExecScriptSyncBase64(ctx context.Context) apibase.Result {
 
 	log.Debugf("exec script sidecar_id %v, agentid %v, seq %v", SidecarId.String(), agentId, seq)
 	ControlProgressLog("[AGENT-CONTROL] ExecScriptSyncBase64 exec script sidecar_id %v, agentid %v, seq %v", SidecarId.String(), agentId, seq)
-
+	//当 execId 不为空串的时候才汇报 seq
+	execId := ctx.GetHeader("execId")
+	if execId != "" {
+		err = report.ReportSeq(execId, uint32(seq))
+		if err != nil {
+			log.Errorf("%s", err.Error())
+		}
+	}
 	err, result := shipper.GetApiShipper().ExecScriptShipperSync(uint32(seq), SidecarId, agentId, params)
 
 	if err != nil {
@@ -365,7 +451,10 @@ func ExecRestSync(ctx context.Context) apibase.Result {
 	}
 
 	seq, err := model.AgentOperation.NewOperationSeqno(SidecarId, agentId)
-
+	err = report.ReportSeq(params.ExecId, uint32(seq))
+	if err != nil {
+		log.Errorf("%s", err.Error())
+	}
 	if err != nil {
 		ControlProgressLog("[AGENT-CONTROL] ExecRestSync err: %v", err)
 		apibase.ThrowDBModelError(err)

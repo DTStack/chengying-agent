@@ -101,6 +101,22 @@ var SidecarManagementRoutes = apibase.Route{
 				},
 			},
 		}, {
+			//http://xxxx/api/v1/sidecar/{sidecar_id}/execscriptOftenSync
+			Path: "execscriptOftenSync",
+			POST: impl.ExecScriptOftenSync,
+			Docs: apibase.Docs{
+				GET: &apibase.ApiDoc{
+					Name: "",
+					Returns: []apibase.ApiReturnGroup{{
+						Fields: apibase.ResultFields{
+							"$.operation_seq": apibase.ApiReturn{"int", "操作序列号"},
+							"$.agent_id":      apibase.ApiReturn{"string", "agent唯一标识"},
+							"$.result":        apibase.ApiReturn{"string", "exec result"},
+						},
+					}},
+				},
+			},
+		}, {
 			//http://xxxx/api/v1/sidecar/{sidecar_id}/execscriptSyncBase64
 			Path: "execscriptSyncBase64",
 			POST: impl.ExecScriptSyncBase64,

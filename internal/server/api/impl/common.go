@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"easyagent/internal/server/log"
 	"easyagent/internal/server/model"
@@ -70,7 +71,11 @@ func checkForSLB(ctx context.Context, sidecarId uuid.UUID) bool {
 	if ctx.Request().Host == net.JoinHostPort(serverHost, strconv.Itoa(serverPort)) {
 		return false
 	}
-	log.Debugf("serverHost %v, serverPort%v, err%v", serverHost, serverPort, err)
+	address := net.JoinHostPort(serverHost, strconv.Itoa(serverPort))
+	if _, err = net.DialTimeout("tcp", address, 3*time.Second); err != nil {
+		log.Debugf("%s:%v conn: %v", serverHost, serverPort, err)
+		return false
+	}
 	ControlProgressLog("[AGENT-CONTROL] serverHost %v, serverPort%v, err%v", serverHost, serverPort, err)
 
 	if err != nil {

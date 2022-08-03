@@ -35,6 +35,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -110,7 +111,7 @@ type agent struct {
 	// just for supervisor
 	restartCount int
 	startTime    time.Time
-	stdBuff      *util.PrefixSuffixSaver
+	logStruct    *util.ReportShellLogStruct
 }
 
 func NewAgent(cfg config.AgentConfig, flushAgentsCh chan struct{}) Agenter {
@@ -136,7 +137,10 @@ func NewAgent(cfg config.AgentConfig, flushAgentsCh chan struct{}) Agenter {
 		stopRecvCh:    make(chan struct{}),
 		killCh:        make(chan struct{}),
 		flushAgentsCh: flushAgentsCh,
-		stdBuff:       &util.PrefixSuffixSaver{N: 256 << 10},
+		logStruct: &util.ReportShellLogStruct{
+			PrefixSuffixSaver: &util.PrefixSuffixSaver{N: 128 << 10},
+			Seqno:             0,
+		},
 	}
 	ag.setStopSleepCh()
 	ag.setContextCancel()
@@ -366,7 +370,7 @@ func (ag *agent) supervisor(cmd *util.Cmd) {
 		err := fmt.Errorf("stop supervisor: %v", ag.agentId)
 		base.Debugf("%v", err)
 		if !reqStop || ag.isKilled() {
-			event.ReportEvent(&proto.Event_AgentError{AgentId: ag.agentId.Bytes(), Errstr: "agent run error(unexpected):" + err.Error()})
+			event.ReportEvent(&proto.Event_AgentError{AgentId: ag.agentId.Bytes(), Errstr: "agent run error(unexpected):" + err.Error(), Seqno: ag.logStruct.Seqno})
 		}
 	}()
 
@@ -380,7 +384,7 @@ func (ag *agent) supervisor(cmd *util.Cmd) {
 		ag.startHealthCheck()
 
 		err := cmd.Wait()
-		base.Infof("agent %v exit(%v),std error: %v", ag.agentId, err, string(ag.stdBuff.Bytes()))
+		base.Infof("agent %v exit(%v),std error: %v", ag.agentId, err, string(ag.logStruct.Bytes()))
 		ag.stopHealthCheck()
 		monitor.StopMonitAgent(ag.agentId)
 		if err == context.Canceled {
@@ -431,7 +435,7 @@ func (ag *agent) supervisor(cmd *util.Cmd) {
 			}
 			// start fail
 			base.Errorf("run agent %v error: %v", ag.agentId, err)
-			event.ReportEvent(&proto.Event_AgentError{AgentId: ag.agentId.Bytes(), Errstr: "run agent error: " + err.Error()})
+			event.ReportEvent(&proto.Event_AgentError{AgentId: ag.agentId.Bytes(), Errstr: "run agent error: " + err.Error(), Seqno: ag.logStruct.Seqno})
 			ag.sleep(2 * time.Second)
 		}
 		base.Infof("run agent %v success(pid: %d)", ag.agentId, cmd.Process.Pid)
@@ -453,13 +457,20 @@ func (ag *agent) install(ctl *proto.ControlResponse_InstallAgentOptions_, seqno 
 		return
 	}
 	defer os.Remove(script)
-
+	err = util.RpcClient.ReportShellContent(ctl.InstallAgentOptions.InstallScript, seqno)
+	if err != nil {
+		base.Errorf("ReportShellContent %v", err)
+	}
 	ctx, cancel := context.WithTimeout(ag.opCtx, ctl.InstallAgentOptions.Timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, script, ctl.InstallAgentOptions.InstallParameter...)
-	stdBuf := &util.PrefixSuffixSaver{N: 64 << 10}
-	cmd.Stdout = stdBuf
-	cmd.Stderr = stdBuf
+
+	logStruct := &util.ReportShellLogStruct{
+		PrefixSuffixSaver: &util.PrefixSuffixSaver{N: 128 << 10},
+		Seqno:             seqno,
+	}
+	cmd.Stdout = logStruct
+	cmd.Stderr = logStruct
 	cmd.Dir = filepath.Dir(script)
 	if err := cmd.Run(); err != nil {
 		ev.Failed = true
@@ -467,10 +478,10 @@ func (ag *agent) install(ctl *proto.ControlResponse_InstallAgentOptions_, seqno 
 			base.Errorf("%v", err)
 			ev.Message = err.Error()
 		} else {
-			ev.Message = string(stdBuf.Bytes())
+			ev.Message = string(logStruct.Bytes())
 		}
 	} else {
-		ev.Message = string(stdBuf.Bytes())
+		ev.Message = string(logStruct.Bytes())
 	}
 
 	event.ReportEvent(ev)
@@ -491,13 +502,21 @@ func (ag *agent) uninstall(ctl *proto.ControlResponse_UninstallAgentOptions_, se
 		return
 	}
 	defer os.Remove(script)
-
+	err = util.RpcClient.ReportShellContent(ctl.UninstallAgentOptions.UninstallScript, seqno)
+	if err != nil {
+		base.Errorf("ReportShellContent %v", err)
+	}
 	ctx, cancel := context.WithTimeout(ag.opCtx, ctl.UninstallAgentOptions.Timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, script, ctl.UninstallAgentOptions.Parameter...)
-	stdBuf := &util.PrefixSuffixSaver{N: 64 << 10}
-	cmd.Stdout = stdBuf
-	cmd.Stderr = stdBuf
+
+	logStruct := &util.ReportShellLogStruct{
+		PrefixSuffixSaver: &util.PrefixSuffixSaver{N: 128 << 10},
+		Seqno:             seqno,
+	}
+
+	cmd.Stdout = logStruct
+	cmd.Stderr = logStruct
 	if ag.workdir == "" {
 		if cmd.Dir = filepath.Dir(ag.binaryPath); cmd.Dir == "." {
 			cmd.Dir = os.TempDir()
@@ -514,10 +533,10 @@ func (ag *agent) uninstall(ctl *proto.ControlResponse_UninstallAgentOptions_, se
 			base.Errorf("%v", err)
 			ev.Message = err.Error()
 		} else {
-			ev.Message = string(stdBuf.Bytes())
+			ev.Message = string(logStruct.Bytes())
 		}
 	} else {
-		ev.Message = string(stdBuf.Bytes())
+		ev.Message = string(logStruct.Bytes())
 	}
 
 	event.ReportEvent(ev)
@@ -538,13 +557,19 @@ func (ag *agent) update(ctl *proto.ControlResponse_UpdateAgentOptions_, seqno ui
 		return
 	}
 	defer os.Remove(script)
-
+	err = util.RpcClient.ReportShellContent(ctl.UpdateAgentOptions.UpdateScript, seqno)
+	if err != nil {
+		base.Errorf("ReportShellContent %v", err)
+	}
 	ctx, cancel := context.WithTimeout(ag.opCtx, ctl.UpdateAgentOptions.Timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, script, ctl.UpdateAgentOptions.Parameter...)
-	stdBuf := &util.PrefixSuffixSaver{N: 64 << 10}
-	cmd.Stdout = stdBuf
-	cmd.Stderr = stdBuf
+	logStruct := &util.ReportShellLogStruct{
+		PrefixSuffixSaver: &util.PrefixSuffixSaver{N: 128 << 10},
+		Seqno:             seqno,
+	}
+	cmd.Stdout = logStruct
+	cmd.Stderr = logStruct
 	if ag.workdir == "" {
 		if cmd.Dir = filepath.Dir(ag.binaryPath); cmd.Dir == "." {
 			cmd.Dir = os.TempDir()
@@ -558,10 +583,10 @@ func (ag *agent) update(ctl *proto.ControlResponse_UpdateAgentOptions_, seqno ui
 			base.Errorf("%v", err)
 			ev.Message = err.Error()
 		} else {
-			ev.Message = string(stdBuf.Bytes())
+			ev.Message = string(logStruct.Bytes())
 		}
 	} else {
-		ev.Message = string(stdBuf.Bytes())
+		ev.Message = string(logStruct.Bytes())
 	}
 	event.ReportEvent(ev)
 }
@@ -569,9 +594,15 @@ func (ag *agent) update(ctl *proto.ControlResponse_UpdateAgentOptions_, seqno ui
 // it wrapper run
 func (ag *agent) start(ctl *proto.ControlResponse_StartAgentOptions_, seqno uint32) {
 	ev := &proto.Event_OperationProgress{
-		Seqno:   seqno,
 		AgentId: ctl.StartAgentOptions.AgentId,
+		Seqno:   seqno,
 	}
+
+	ag.logStruct = &util.ReportShellLogStruct{
+		PrefixSuffixSaver: &util.PrefixSuffixSaver{N: 128 << 10},
+		Seqno:             seqno,
+	}
+
 	if err := ag.run(
 		ctl.StartAgentOptions.CpuLimit,
 		ctl.StartAgentOptions.MemLimit,
@@ -618,8 +649,13 @@ func (ag *agent) run(cpuLimit float32, memLimit, netLimit uint64, environment ma
 		}
 	}
 	cmd := util.CommandContext(ag.getCtxAgent(), ag.runUser, true, ag.cg, binaryPath, ag.parameter...)
-	cmd.Stdout = ag.stdBuff
-	cmd.Stderr = ag.stdBuff
+	err := util.RpcClient.ReportShellContent(binaryPath+" "+strings.Join(ag.parameter, " "), ag.logStruct.Seqno)
+	if err != nil {
+		base.Errorf("ReportShellContent %v", err)
+	}
+
+	cmd.Stdout = ag.logStruct
+	cmd.Stderr = ag.logStruct
 	if ag.workdir == "" {
 		if cmd.Dir = filepath.Dir(ag.binaryPath); cmd.Dir == "." {
 			cmd.Dir = os.TempDir()
@@ -786,12 +822,20 @@ func (ag *agent) execScript(ctl *proto.ControlResponse_ExecScriptOptions_, seqno
 	}
 	defer os.Remove(script)
 
+	err = util.RpcClient.ReportShellContent(ctl.ExecScriptOptions.ExecScript, seqno)
+	if err != nil {
+		base.Errorf("ReportShellContent %v", err)
+	}
+
 	ctx, cancel := context.WithTimeout(ag.opCtx, ctl.ExecScriptOptions.Timeout)
 	defer cancel()
 	cmd := util.CommandContext(ctx, "", false, nil, script, ctl.ExecScriptOptions.Parameter...)
-	stdBuf := &util.PrefixSuffixSaver{N: 128 << 10}
-	cmd.Stdout = stdBuf
-	cmd.Stderr = stdBuf
+	logStruct := &util.ReportShellLogStruct{
+		PrefixSuffixSaver: &util.PrefixSuffixSaver{N: 128 << 10},
+		Seqno:             seqno,
+	}
+	cmd.Stdout = logStruct
+	cmd.Stderr = logStruct
 	if ag.workdir == "" {
 		if cmd.Dir = filepath.Dir(ag.binaryPath); cmd.Dir == "." {
 			cmd.Dir = os.TempDir()
@@ -805,10 +849,10 @@ func (ag *agent) execScript(ctl *proto.ControlResponse_ExecScriptOptions_, seqno
 			base.Errorf("%v", err)
 			ev.Response = err.Error()
 		} else {
-			ev.Response = string(stdBuf.Bytes())
+			ev.Response = string(logStruct.Bytes())
 		}
 	} else {
-		ev.Response = string(stdBuf.Bytes())
+		ev.Response = string(logStruct.Bytes())
 	}
 	event.ReportEvent(ev)
 }

@@ -31,7 +31,14 @@ import (
 )
 
 func (ag *agent) startHealthCheck() {
+	//没有健康检查的 通过 Event_ExecScriptResponse 汇报成功的状态 agentId  为 uuid.Nil.Bytes() 即可
 	if ag.healthShell == "" {
+		ev := &proto.Event_AgentHealthCheck{
+			Seqno:   ag.logStruct.Seqno,
+			AgentId: ag.agentId.Bytes(),
+			Failed:  false,
+		}
+		event.ReportEvent(ev)
 		return
 	}
 	if ag.healthStopCh != nil {
@@ -62,7 +69,7 @@ func (ag *agent) startHealthCheck() {
 			case <-ag.healthStopCh:
 				return
 			case <-ticker.C:
-				ev := &proto.Event_AgentHealthCheck{AgentId: ag.agentId.Bytes()}
+				ev := &proto.Event_AgentHealthCheck{AgentId: ag.agentId.Bytes(), Seqno: ag.logStruct.Seqno}
 				if ag.runHealthCheck() {
 					healthFailedCount = 0
 					event.ReportEvent(ev)

@@ -24,9 +24,10 @@ import (
 	"os"
 	"time"
 
+	uuid "github.com/satori/go.uuid"
+
 	"github.com/elastic/go-ucfg"
 	"github.com/elastic/go-ucfg/yaml"
-	"github.com/satori/go.uuid"
 	y2 "gopkg.in/yaml.v2"
 )
 

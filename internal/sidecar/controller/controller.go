@@ -32,6 +32,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	uuid "github.com/satori/go.uuid"
+
 	"easyagent/internal/proto"
 	"easyagent/internal/sidecar/base"
 	"easyagent/internal/sidecar/client"
@@ -39,7 +41,6 @@ import (
 	"easyagent/internal/sidecar/controller/agent"
 	"easyagent/internal/sidecar/controller/util"
 	"easyagent/internal/sidecar/event"
-	"github.com/satori/go.uuid"
 )
 
 var (
@@ -356,13 +357,24 @@ func (c *Controller) execScript(ctlResp *proto.ControlResponse) {
 		return
 	}
 	defer os.Remove(script)
-
+	err = util.RpcClient.ReportShellContent(ctl.ExecScriptOptions.ExecScript, ctlResp.Seqno)
+	if err != nil {
+		base.Errorf("%v", err)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), ctl.ExecScriptOptions.Timeout)
 	defer cancel()
 	cmd := util.CommandContext(ctx, "", false, nil, script, ctl.ExecScriptOptions.Parameter...)
-	stdBuf := &util.PrefixSuffixSaver{N: 128 << 10}
-	cmd.Stdout = stdBuf
-	cmd.Stderr = stdBuf
+
+	logStruct := &util.ReportShellLogStruct{
+		//stdBuf := &util.PrefixSuffixSaver{N: 128 << 10}
+		PrefixSuffixSaver: &util.PrefixSuffixSaver{N: 128 << 10},
+		Seqno:             ctlResp.Seqno,
+	}
+	cmd.Stdout = logStruct
+	cmd.Stderr = logStruct
+	//stdBuf := &util.PrefixSuffixSaver{N: 128 << 10}
+	//cmd.Stdout = stdBuf
+	//cmd.Stderr = stdBuf
 	cmd.Dir = filepath.Dir(script)
 	if err := cmd.Run(); err != nil {
 		ev.Failed = true
@@ -370,10 +382,10 @@ func (c *Controller) execScript(ctlResp *proto.ControlResponse) {
 			base.Errorf("%v", err)
 			ev.Response = err.Error()
 		} else {
-			ev.Response = string(stdBuf.Bytes())
+			ev.Response = string(logStruct.Bytes())
 		}
 	} else {
-		ev.Response = string(stdBuf.Bytes())
+		ev.Response = string(logStruct.Bytes())
 	}
 	event.ReportEvent(ev)
 }

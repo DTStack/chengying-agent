@@ -27,9 +27,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/satori/go.uuid"
+
 	"easyagent/internal/proto"
 	"easyagent/internal/sidecar/base"
-	"github.com/satori/go.uuid"
+
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -44,6 +46,8 @@ type EaClienter interface {
 	GetControlResponse() *proto.ControlResponse
 	ReportEvent(event *proto.Event) error
 	GetServerAddress() string
+	ReportShellContent(content string, seqno uint32) error
+	ReportShellLog(content string, seqno uint32) error
 }
 
 type easyAgentClient struct {
@@ -54,6 +58,59 @@ type easyAgentClient struct {
 	serverAddress string
 	client        proto.EasyAgentServiceClient
 	stream        proto.EasyAgentService_ReadyForControlClient
+	shellStream   proto.EasyAgentService_ReportShellLogClient
+}
+
+func (c *easyAgentClient) ReportShellContent(content string, seqno uint32) error {
+	if seqno == 0 {
+		return nil
+	}
+	_, err := c.client.ReportShellContent(context.Background(), &proto.ShellReport{
+		SidecarRequestHeader: proto.SidecarRequestHeader{
+			Id:      c.uuid,
+			Systime: time.Now(),
+		},
+		Seqno:   seqno,
+		Content: content,
+	})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *easyAgentClient) ReportShellLog(content string, seqno uint32) error {
+	defer func() {
+		if r := recover(); r != nil {
+			base.Errorf("ReportShellLog panic: %v", r)
+		}
+	}()
+	if seqno == 0 {
+		base.Errorf("ReportShellLog zero: %v", seqno)
+		return nil
+	}
+	if c.shellStream == nil {
+		var err error
+		c.shellStream, err = c.client.ReportShellLog(context.Background())
+		if err != nil {
+			c.shellStream = nil
+			return err
+		}
+	}
+	err := c.shellStream.Send(&proto.ShellReport{
+		SidecarRequestHeader: proto.SidecarRequestHeader{
+			Id:      c.uuid,
+			Systime: time.Now(),
+		},
+		Seqno:   seqno,
+		Content: content,
+	})
+
+	if err != nil {
+		c.shellStream = nil
+		return err
+	}
+	return nil
 }
 
 func (c *easyAgentClient) RegisterSidecar(req *proto.RegisterRequest) error {
@@ -155,6 +212,17 @@ func NewEasyAgentClient(uuid uuid.UUID, serverAddr string, istls, tlsSkipVerify 
 		serverAddress: serverAddr,
 		client:        proto.NewEasyAgentServiceClient(conn),
 	}
+	go func() {
+		for {
+			if eaClient.shellStream != nil {
+				select {
+				case <-eaClient.shellStream.Context().Done():
+					eaClient.shellStream = nil
+					base.Errorf("shellStream err: %v", eaClient.shellStream.Context().Err())
+				}
+			}
+		}
+	}()
 	eaClient.registerOk.Store(false)
 	return eaClient, nil
 }
